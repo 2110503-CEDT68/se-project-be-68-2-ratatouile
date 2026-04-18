@@ -1,13 +1,39 @@
 const Reservation = require('../models/Reservation');
 const Restaurant = require('../models/Restaurant');
 
+const getOwnedRestaurantIds = async (userId) => {
+    const restaurants = await Restaurant.find({ owner: userId }).select('_id');
+    return restaurants.map((restaurant) => restaurant._id);
+};
+
+const canManageReservation = async (reservation, user) => {
+    if (!reservation || !user) {
+        return false;
+    }
+
+    if (user.role === 'admin') {
+        return true;
+    }
+
+    if (reservation.user.toString() === user.id) {
+        return true;
+    }
+
+    if (user.role !== 'restaurantOwner') {
+        return false;
+    }
+
+    const restaurant = await Restaurant.findById(reservation.restaurant).select('owner');
+    return restaurant?.owner?.toString() === user.id;
+};
+
 //@desc     Get all reservations
 //@route    GET /api/v1/reservations
 //@access   Public
 exports.getReservations = async (req, res, next) => {
     let query;
-    //General users can see only their reservations!
-    if (req.user.role !== 'admin') {
+    // General users can see only their reservations.
+    if (req.user.role === 'user') {
         query = Reservation.find({ user: req.user.id }).populate({
             path: 'restaurant',
             select: 'name address telephone openTime closeTime picture'
@@ -15,7 +41,39 @@ exports.getReservations = async (req, res, next) => {
                 path: 'user',
                 select: 'name email telephone'
             });
-    } else { //If you are an admin, you can see all!
+    } else if (req.user.role === 'restaurantOwner') {
+        if (req.params.restaurantId) {
+            const restaurant = await Restaurant.findOne({
+                _id: req.params.restaurantId,
+                owner: req.user.id
+            }).select('_id');
+
+            if (!restaurant) {
+                return res.status(403).json({
+                    success: false,
+                    message: `User ${req.user.id} is not authorized to access reservations for this restaurant`
+                });
+            }
+
+            query = Reservation.find({ restaurant: req.params.restaurantId }).populate({
+                path: 'restaurant',
+                select: 'name address telephone openTime closeTime picture'
+            }).populate({
+                path: 'user',
+                select: 'name email telephone'
+            });
+        } else {
+            const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+
+            query = Reservation.find({ restaurant: { $in: ownedRestaurantIds } }).populate({
+                path: 'restaurant',
+                select: 'name address telephone openTime closeTime picture'
+            }).populate({
+                path: 'user',
+                select: 'name email telephone'
+            });
+        }
+    } else { // If you are an admin, you can see all.
         if (req.params.restaurantId) {
             console.log(req.params.restaurantId);
             query = Reservation.find({ restaurant: req.params.restaurantId }).populate({
@@ -56,11 +114,23 @@ exports.getReservation = async (req, res, next) => {
     try {
         const reservation = await Reservation.findById(req.params.id).populate({
             path: 'restaurant',
-            select: 'name address telephone openTime closeTime'
+            select: 'name address telephone openTime closeTime owner'
         });
 
         if (!reservation) {
             return res.status(404).json({ success: false, message: `No reservation with the id of ${req.params.id}` });
+        }
+
+        const canAccessReservation =
+            req.user.role === 'admin' ||
+            reservation.user.toString() === req.user.id ||
+            (req.user.role === 'restaurantOwner' && reservation.restaurant?.owner?.toString() === req.user.id);
+
+        if (!canAccessReservation) {
+            return res.status(403).json({
+                success: false,
+                message: `User ${req.user.id} is not authorized to access this reservation`
+            });
         }
 
         res.status(200).json({
@@ -123,8 +193,8 @@ exports.updateReservation = async (req, res, next) => {
             return res.status(404).json({ success: false, message: `No reservation with the id of ${req.params.id}` });
         }
 
-        if (reservation.user.toString() !== req.user.id && req.user.role !== 'admin') {
-            return res.status(401).json({ success: false, message: `User ${req.user.id} is not authorized to update this reservation` });
+        if (!(await canManageReservation(reservation, req.user))) {
+            return res.status(403).json({ success: false, message: `User ${req.user.id} is not authorized to update this reservation` });
         }
 
         const updatePayload = {
@@ -134,10 +204,16 @@ exports.updateReservation = async (req, res, next) => {
         delete updatePayload.user;
         delete updatePayload.restaurant;
 
-        if (req.user.role !== 'admin') {
+        if (req.user.role === 'user') {
             delete updatePayload.status;
             delete updatePayload.reason_reject;
-        } else if (updatePayload.status !== 'rejected') {
+        }
+
+        if (req.user.role === 'restaurantOwner') {
+            delete updatePayload.reservationDate;
+        }
+
+        if ((req.user.role === 'admin' || req.user.role === 'restaurantOwner') && updatePayload.status !== 'rejected') {
             updatePayload.reason_reject = '';
         }
 
@@ -167,8 +243,8 @@ exports.deleteReservation = async (req, res, next) => {
             return res.status(404).json({ success: false, message: `No reservation with the id of ${req.params.id}` });
         }
 
-        if (reservation.user.toString() !== req.user.id && req.user.role !== 'admin') {
-            return res.status(401).json({ success: false, message: `User ${req.user.id} is not authorized to delete this reservation` });
+        if (!(await canManageReservation(reservation, req.user))) {
+            return res.status(403).json({ success: false, message: `User ${req.user.id} is not authorized to delete this reservation` });
         }
 
         await reservation.deleteOne();
