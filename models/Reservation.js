@@ -5,6 +5,12 @@ const ReservationSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  status: {
+    type: String,
+    enum: ['waiting', 'approved', 'rejected'],
+    default: 'waiting',
+    required: true
+  },
   user: {
     type: mongoose.Schema.ObjectId,
     ref: 'User',
