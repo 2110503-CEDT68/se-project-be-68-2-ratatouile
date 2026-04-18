@@ -1,72 +1,41 @@
-const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db'); 
-const cookieParser = require('cookie-parser');
-
+const connectDB = require('./config/db');
+const app = require('./app');
 
 dotenv.config({ path: './config/config.env' });
 
-connectDB();
+let server;
 
-const restaurant  = require('./routes/restaurants');
-const auth = require('./routes/auth');
-const reservations =require('./routes/reservations');
-const reviews = require('./routes/reviews');
-const cors = require('cors');
+const startServer = async () => {
+  await connectDB();
 
-const app = express();
+  const PORT = process.env.PORT || 5000;
 
-const defaultAllowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  server = app.listen(PORT, () => {
+    console.log(
+      'Server running in',
+      process.env.NODE_ENV,
+      'mode on port',
+      PORT
+    );
+  });
 
-const allowedOrigins = [
-  ...defaultAllowedOrigins,
-  ...(process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
-];
-
-const corsOptions = {
-  origin(origin, callback) {
-    // Allow non-browser clients and explicit frontend origins.
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error(`Origin ${origin} is not allowed by CORS`));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  optionsSuccessStatus: 204,
+  return server;
 };
 
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
+if (require.main === module) {
+  startServer();
 
+  process.on('unhandledRejection', (err) => {
+    console.log(`Error: ${err.message}`);
 
-app.use(express.json());
-app.set('query parser','extended');
+    if (!server) {
+      process.exit(1);
+    }
 
-app.use(cookieParser());
-app.use('/api/v1/restaurants',restaurant);
-app.use('/api/v1/auth',auth);
-app.use('/api/v1/reservations',reservations);
-app.use('/api/v1/reviews',reviews);
+    server.close(() => process.exit(1));
+  });
+}
 
-const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
-  console.log(
-    'Server running in',
-    process.env.NODE_ENV,
-    'mode on port',
-    PORT
-  );
-});
-
-process.on('unhandledRejection', (err, promise) => {
-  console.log(`Error: ${err.message}`);
-
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
+module.exports = app;
+module.exports.startServer = startServer;
