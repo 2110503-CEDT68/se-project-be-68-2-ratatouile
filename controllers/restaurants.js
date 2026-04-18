@@ -112,6 +112,8 @@ exports.getRestaurant = async (req, res, next) => {
 //@access Private
 
 exports.createRestaurant = async (req, res, next) => {
+  // Add user to req.body
+  req.body.owner = req.user.id;
   
  try {
         const restaurant = await Restaurant.create(req.body);
