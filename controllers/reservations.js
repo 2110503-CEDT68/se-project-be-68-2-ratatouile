@@ -78,8 +78,12 @@ exports.getReservation = async (req, res, next) => {
 //@access   Private
 exports.addReservation = async (req, res, next) => {
     try {
-        req.body.restaurant = req.params.restaurantId;
-        req.body.user = req.user.id;
+        const reservationPayload = {
+            ...req.body,
+            restaurant: req.params.restaurantId,
+            user: req.user.id,
+            status: 'waiting'
+        };
 
         const restaurant = await Restaurant.findById(req.params.restaurantId);
 
@@ -95,9 +99,9 @@ exports.addReservation = async (req, res, next) => {
             return res.status(400).json({ success: false, message: `The user with ID ${req.user.id} has already made 3 reservations` });
         }
 
-        const reservation = await Reservation.create(req.body);
+        const reservation = await Reservation.create(reservationPayload);
 
-        res.status(200).json({
+        res.status(201).json({
             success: true,
             data: reservation
         });
@@ -122,7 +126,18 @@ exports.updateReservation = async (req, res, next) => {
             return res.status(401).json({ success: false, message: `User ${req.user.id} is not authorized to update this reservation` });
         }
 
-        reservation = await Reservation.findByIdAndUpdate(req.params.id, req.body, {
+        const updatePayload = {
+            ...req.body
+        };
+
+        delete updatePayload.user;
+        delete updatePayload.restaurant;
+
+        if (req.user.role !== 'admin') {
+            delete updatePayload.status;
+        }
+
+        reservation = await Reservation.findByIdAndUpdate(req.params.id, updatePayload, {
             new: true,
             runValidators: true
         });
