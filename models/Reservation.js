@@ -11,6 +11,12 @@ const ReservationSchema = new mongoose.Schema({
     default: 'waiting',
     required: true
   },
+  reason_reject: {
+    type: String,
+    trim: true,
+    maxlength: [300, 'Reject reason can not be more than 300 characters'],
+    default: ''
+  },
   user: {
     type: mongoose.Schema.ObjectId,
     ref: 'User',

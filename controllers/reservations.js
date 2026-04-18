@@ -82,7 +82,8 @@ exports.addReservation = async (req, res, next) => {
             ...req.body,
             restaurant: req.params.restaurantId,
             user: req.user.id,
-            status: 'waiting'
+            status: 'waiting',
+            reason_reject: ''
         };
 
         const restaurant = await Restaurant.findById(req.params.restaurantId);
@@ -135,6 +136,9 @@ exports.updateReservation = async (req, res, next) => {
 
         if (req.user.role !== 'admin') {
             delete updatePayload.status;
+            delete updatePayload.reason_reject;
+        } else if (updatePayload.status !== 'rejected') {
+            updatePayload.reason_reject = '';
         }
 
         reservation = await Reservation.findByIdAndUpdate(req.params.id, updatePayload, {
