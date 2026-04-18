@@ -35,6 +35,17 @@ const buildRestaurantErrorResponse = (err) => {
   };
 };
 
+const canManageRestaurant = (restaurant, user) => {
+  if (!restaurant || !user) {
+    return false;
+  }
+
+  return (
+    user.role === 'admin' ||
+    restaurant.owner?.toString() === user.id
+  );
+};
+
 exports.getRestaurants = async (req, res, next) => {
   let query;
 
@@ -180,23 +191,41 @@ exports.createRestaurant = async (req, res, next) => {
 
 exports.updateRestaurant = async (req, res, next) => {
   try {
-    const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, req.body, {
+    const restaurant = await Restaurant.findById(req.params.id);
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        error: `Restaurant not found with id of ${req.params.id}`
+      });
+    }
+
+    if (!canManageRestaurant(restaurant, req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to update this restaurant profile'
+      });
+    }
+
+    const restaurantPayload = {
+      ...req.body
+    };
+
+    delete restaurantPayload.owner;
+
+    const updatedRestaurant = await Restaurant.findByIdAndUpdate(req.params.id, restaurantPayload, {
       new: true,
       runValidators: true,
     });
 
-    if (!restaurant) {
-      return res.status(400).json({ success: false });
-    }
-
     res.status(200).json({
       success: true,
-      data: restaurant,
+      message: 'Restaurant profile updated successfully',
+      data: updatedRestaurant,
     });
   } catch (err) {
-    res.status(400).json({
-      success: false,
-    });
+    const errorResponse = buildRestaurantErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
 
@@ -209,19 +238,29 @@ exports.deleteRestaurant = async (req, res, next) => {
     const restaurant = await Restaurant.findById(req.params.id);
 
     if (!restaurant) {
-      return res.status(404).json({success:false,message:`Restaurant not found with id of ${req.params.id}`})
-
+      return res.status(404).json({
+        success: false,
+        error: `Restaurant not found with id of ${req.params.id}`
+      });
     }
+
+    if (!canManageRestaurant(restaurant, req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to delete this restaurant profile'
+      });
+    }
+
     await Reservation.deleteMany({restaurant: req.params.id});
     await Restaurant.deleteOne({_id: req.params.id});
 
     res.status(200).json({
       success: true,
+      message: 'Restaurant profile deleted successfully',
       data: {},
     });
   } catch (err) {
-    res.status(400).json({
-      success: false,
-    });
+    const errorResponse = buildRestaurantErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
