@@ -240,21 +240,31 @@ exports.deleteReservation = async (req, res, next) => {
         const reservation = await Reservation.findById(req.params.id);
 
         if (!reservation) {
-            return res.status(404).json({ success: false, message: `No reservation with the id of ${req.params.id}` });
+            return res.status(404).json({
+                success: false,
+                message: 'Reservation has already been cancelled or does not exist'
+            });
         }
 
         if (!(await canManageReservation(reservation, req.user))) {
-            return res.status(403).json({ success: false, message: `User ${req.user.id} is not authorized to delete this reservation` });
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to cancel this reservation'
+            });
         }
 
         await reservation.deleteOne();
 
         res.status(200).json({
             success: true,
+            message: 'Reservation cancelled successfully',
             data: {}
         });
     } catch (error) {
         console.log(error);
-        return res.status(500).json({ success: false, message: "Cannot delete Reservation" });
+        return res.status(500).json({
+            success: false,
+            message: 'Unable to cancel reservation right now'
+        });
     }
 };
