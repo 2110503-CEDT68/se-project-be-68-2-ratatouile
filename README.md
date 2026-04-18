@@ -8,7 +8,7 @@ Required environment variables:
 
 ```env
 NODE_ENV=development
-PORT=5000
+PORT=5050
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRE=30d
