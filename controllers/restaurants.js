@@ -4,6 +4,37 @@
 const Restaurant = require("../models/Restaurant");
 const Reservation = require('../models/Reservation');
 
+const buildRestaurantErrorResponse = (err) => {
+  if (err && err.code === 11000) {
+    const duplicatedField = Object.keys(err.keyPattern || {})[0] || 'field';
+    return {
+      statusCode: 409,
+      body: {
+        success: false,
+        error: `${duplicatedField} already exists`
+      }
+    };
+  }
+
+  if (err && err.name === 'ValidationError') {
+    return {
+      statusCode: 422,
+      body: {
+        success: false,
+        error: Object.values(err.errors).map((validationError) => validationError.message)
+      }
+    };
+  }
+
+  return {
+    statusCode: 400,
+    body: {
+      success: false,
+      error: err.message || 'Unable to process restaurant request'
+    }
+  };
+};
+
 exports.getRestaurants = async (req, res, next) => {
   let query;
 
@@ -112,16 +143,35 @@ exports.getRestaurant = async (req, res, next) => {
 //@access Private
 
 exports.createRestaurant = async (req, res, next) => {
-  // Add user to req.body
-  req.body.owner = req.user.id;
-  
- try {
-        const restaurant = await Restaurant.create(req.body);
-  res.status(201).json({ success: true, data: restaurant });
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ success: false, error: err.message });
+  try {
+    const restaurantPayload = {
+      ...req.body,
+      owner: req.user.id
+    };
+
+    if (req.user.role === 'restaurantOwner') {
+      const existingRestaurant = await Restaurant.findOne({ owner: req.user.id });
+
+      if (existingRestaurant) {
+        return res.status(409).json({
+          success: false,
+          error: 'Restaurant owner already has a restaurant profile'
+        });
+      }
     }
+
+    const restaurant = await Restaurant.create(restaurantPayload);
+
+    res.status(201).json({
+      success: true,
+      message: 'Restaurant profile created successfully',
+      data: restaurant
+    });
+  } catch (err) {
+    const errorResponse = buildRestaurantErrorResponse(err);
+    console.error(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
 };
 
 //@desc   Update single restaurant
