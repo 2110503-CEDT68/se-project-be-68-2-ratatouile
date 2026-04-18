@@ -213,6 +213,17 @@ exports.updateReservation = async (req, res, next) => {
             delete updatePayload.reservationDate;
         }
 
+        if (typeof updatePayload.reason_reject === 'string') {
+            updatePayload.reason_reject = updatePayload.reason_reject.trim();
+        }
+
+        if (updatePayload.status === 'rejected' && !updatePayload.reason_reject) {
+            return res.status(422).json({
+                success: false,
+                message: 'Please provide a rejection reason when rejecting a reservation'
+            });
+        }
+
         if ((req.user.role === 'admin' || req.user.role === 'restaurantOwner') && updatePayload.status !== 'rejected') {
             updatePayload.reason_reject = '';
         }
