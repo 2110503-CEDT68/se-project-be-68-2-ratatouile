@@ -2,7 +2,7 @@
 
 # Backend Setup
 
-Create `config/config.env` before starting the server.
+Copy `config/config.env.example` to `config/config.env` before starting the server.
 
 Required environment variables:
 
