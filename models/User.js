@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -21,7 +22,7 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin', 'restaurantOwner'],
     default: 'user'
   },
   password: {
@@ -36,10 +37,24 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+UserSchema.virtual('restaurants', {
+  ref: 'Restaurant',
+  localField: '_id',
+  foreignField: 'owner',
+  justOne: false
 });
 
 // Encrypt password using bcrypt
 UserSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
