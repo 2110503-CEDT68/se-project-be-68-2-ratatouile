@@ -251,6 +251,19 @@ exports.deleteRestaurant = async (req, res, next) => {
       });
     }
 
+    // Check for active (waiting or approved) reservations
+    const activeReservations = await Reservation.find({
+      restaurant: req.params.id,
+      status: { $in: ['waiting', 'approved'] }
+    });
+
+    if (activeReservations.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete restaurant with ${activeReservations.length} active (waiting or approved) reservations. Please handle them first.`
+      });
+    }
+
     await Reservation.deleteMany({restaurant: req.params.id});
     await Restaurant.deleteOne({_id: req.params.id});
 

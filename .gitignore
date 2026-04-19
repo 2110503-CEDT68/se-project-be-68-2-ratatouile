@@ -1,2 +1,6 @@
 node_modules/*
 config/config.env
+.agents/
+antigravity-setup/
+AGENT.md
+/scripts/test_rest_04_05.js
