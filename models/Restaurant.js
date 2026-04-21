@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const MenuItemSchema = require("./MenuItem");
 
 const RestaurantSchema = new mongoose.Schema(
   {
@@ -44,10 +43,12 @@ const RestaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    menu: {
-      type: [MenuItemSchema],
-      default: [],
-    },
+    menu: [
+      {
+        type: mongoose.Schema.ObjectId,
+        ref: "MenuItem",
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,

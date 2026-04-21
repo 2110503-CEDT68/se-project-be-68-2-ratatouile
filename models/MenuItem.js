@@ -1,6 +1,11 @@
 const mongoose = require("mongoose");
 
 const MenuItemSchema = new mongoose.Schema({
+  restaurant: {
+    type: mongoose.Schema.ObjectId,
+    ref: "Restaurant",
+    required: [true, "Please add a restaurant"],
+  },
   name: {
     type: String,
     required: [true, "Please add a menu item name"],
@@ -30,4 +35,6 @@ const MenuItemSchema = new mongoose.Schema({
   },
 });
 
-module.exports = MenuItemSchema;
+MenuItemSchema.index({ restaurant: 1, category: 1, name: 1 });
+
+module.exports = mongoose.model("MenuItem", MenuItemSchema);
