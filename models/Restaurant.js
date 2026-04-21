@@ -1,92 +1,79 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+const MenuItemSchema = require("./MenuItem");
 
-const MenuItemSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Please add a menu item name'],
-    trim: true,
-    maxlength: [100, 'Menu item name can not be more than 100 characters']
+const RestaurantSchema = new mongoose.Schema(
+  {
+    owner: {
+      type: mongoose.Schema.ObjectId,
+      ref: "User",
+    },
+    name: {
+      type: String,
+      required: [true, "Please add a name"],
+      unique: true,
+      trim: true,
+      maxlength: [50, "Name can not be more than 50 characters"],
+    },
+    address: {
+      type: String,
+      required: [true, "Please add an address"],
+      trim: true,
+    },
+    telephone: {
+      type: String,
+      required: [true, "Please add a telephone number"],
+      match: [/^[0-9+\-\s()]{6,20}$/, "Please add a valid telephone number"],
+    },
+    openTime: {
+      type: String,
+      required: [true, "Please add an open time (e.g., 10:00)"],
+      match: [
+        /^([01]\d|2[0-3]):([0-5]\d)$/,
+        "Please add a valid open time in HH:mm format",
+      ],
+    },
+    closeTime: {
+      type: String,
+      required: [true, "Please add a close time (e.g., 22:00)"],
+      match: [
+        /^([01]\d|2[0-3]):([0-5]\d)$/,
+        "Please add a valid close time in HH:mm format",
+      ],
+    },
+    picture: {
+      type: String,
+      trim: true,
+    },
+    menu: {
+      type: [MenuItemSchema],
+      default: [],
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [300, 'Menu item description can not be more than 300 characters']
+  {
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   },
-  price: {
-    type: Number,
-    min: [0, 'Menu item price must be greater than or equal to 0']
-  },
-  category: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'Menu item category can not be more than 50 characters']
-  }
-}, { _id: false });
-
-const RestaurantSchema = new mongoose.Schema({
-  owner: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User'
-  },
-  name: {
-    type: String,
-    required: [true, 'Please add a name'],
-    unique: true,
-    trim: true,
-    maxlength: [50, 'Name can not be more than 50 characters']
-  },
-  address: {
-    type: String,
-    required: [true, 'Please add an address'],
-    trim: true
-  },
-  telephone: {
-    type: String,
-    required: [true, 'Please add a telephone number'],
-    match: [/^[0-9+\-\s()]{6,20}$/, 'Please add a valid telephone number']
-  },
-  openTime: {
-    type: String,
-    required: [true, 'Please add an open time (e.g., 10:00)'],
-    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Please add a valid open time in HH:mm format']
-  },
-  closeTime: {
-    type: String,
-    required: [true, 'Please add a close time (e.g., 22:00)'],
-    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Please add a valid close time in HH:mm format']
-  },
-  picture: {
-    type: String,
-    trim: true
-  },
-  menu: {
-    type: [MenuItemSchema],
-    default: []
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-}, {
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+);
 
 // Reverse populate with virtuals
-RestaurantSchema.virtual('reservations', {
-  ref: 'Reservation',
-  localField: '_id',
-  foreignField: 'restaurant',
-  justOne: false
+RestaurantSchema.virtual("reservations", {
+  ref: "Reservation",
+  localField: "_id",
+  foreignField: "restaurant",
+  justOne: false,
 });
 
-RestaurantSchema.virtual('reviews', {
-  ref: 'Review',
-  localField: '_id',
-  foreignField: 'restaurant',
-  justOne: false
+RestaurantSchema.virtual("reviews", {
+  ref: "Review",
+  localField: "_id",
+  foreignField: "restaurant",
+  justOne: false,
 });
 
 RestaurantSchema.index({ owner: 1, name: 1 });
 
-module.exports = mongoose.model('Restaurant', RestaurantSchema);
+module.exports = mongoose.model("Restaurant", RestaurantSchema);
