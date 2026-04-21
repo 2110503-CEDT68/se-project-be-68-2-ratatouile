@@ -143,6 +143,7 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(Restaurant, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
     jest.spyOn(MenuItem, 'create').mockResolvedValue(createdMenuItem);
 
     await addMenuItem(req, res);
@@ -152,6 +153,10 @@ describe('Restaurant menu item controller requirements', () => {
         name: 'Green Curry',
         restaurant: restaurant._id,
       })
+    );
+    expect(Restaurant.updateOne).toHaveBeenCalledWith(
+      { _id: restaurant._id },
+      { $addToSet: { menu: createdMenuItem._id } }
     );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.body.message).toBe('Menu item added successfully');
@@ -411,10 +416,15 @@ describe('Restaurant menu item controller requirements', () => {
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
     jest.spyOn(MenuItem, 'findOne').mockResolvedValue(menuItem);
     jest.spyOn(MenuItem, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
+    jest.spyOn(Restaurant, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
 
     await deleteMenuItem(req, res);
 
     expect(MenuItem.deleteOne).toHaveBeenCalledWith({ _id: menuItem._id });
+    expect(Restaurant.updateOne).toHaveBeenCalledWith(
+      { _id: restaurant._id },
+      { $pull: { menu: menuItem._id } }
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body).toEqual({
       success: true,

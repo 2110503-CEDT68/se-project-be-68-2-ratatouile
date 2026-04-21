@@ -94,6 +94,11 @@ exports.addMenuItem = async (req, res, next) => {
       restaurant: restaurant._id,
     });
 
+    await Restaurant.updateOne(
+      { _id: restaurant._id },
+      { $addToSet: { menu: menuItem._id } },
+    );
+
     res.status(201).json({
       success: true,
       message: "Menu item added successfully",
@@ -192,6 +197,10 @@ exports.deleteMenuItem = async (req, res, next) => {
     }
 
     await MenuItem.deleteOne({ _id: menuItem._id });
+    await Restaurant.updateOne(
+      { _id: restaurant._id },
+      { $pull: { menu: menuItem._id } },
+    );
 
     res.status(200).json({
       success: true,

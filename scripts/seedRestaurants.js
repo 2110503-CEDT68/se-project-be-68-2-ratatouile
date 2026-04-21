@@ -143,14 +143,23 @@ async function seedRestaurants() {
 
       await MenuItem.deleteMany({ restaurant: savedRestaurant._id });
 
+      let menuIds = [];
+
       if (menu.length > 0) {
-        await MenuItem.insertMany(
+        const menuItems = await MenuItem.insertMany(
           menu.map((menuItem) => ({
             ...menuItem,
             restaurant: savedRestaurant._id
           }))
         );
+
+        menuIds = menuItems.map((menuItem) => menuItem._id);
       }
+
+      await Restaurant.updateOne(
+        { _id: savedRestaurant._id },
+        { $set: { menu: menuIds } }
+      );
     }
 
     const totalRestaurants = await Restaurant.countDocuments();

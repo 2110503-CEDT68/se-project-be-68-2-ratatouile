@@ -16,14 +16,11 @@ const buildMenuItem = (overrides = {}) =>
   });
 
 describe('Restaurant and menu item models', () => {
-  it('exposes menu as a virtual instead of a stored restaurant path', () => {
-    expect(Restaurant.schema.path('menu')).toBeUndefined();
-    expect(Restaurant.schema.virtualpath('menu').options).toEqual(
+  it('stores menu item references on the restaurant schema', () => {
+    expect(Restaurant.schema.path('menu').options.type[0]).toEqual(
       expect.objectContaining({
+        type: mongoose.Schema.ObjectId,
         ref: 'MenuItem',
-        localField: '_id',
-        foreignField: 'restaurant',
-        justOne: false,
       })
     );
   });

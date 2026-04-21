@@ -43,6 +43,12 @@ const RestaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    menu: [
+      {
+        type: mongoose.Schema.ObjectId,
+        ref: "MenuItem",
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,
@@ -64,13 +70,6 @@ RestaurantSchema.virtual("reservations", {
 
 RestaurantSchema.virtual("reviews", {
   ref: "Review",
-  localField: "_id",
-  foreignField: "restaurant",
-  justOne: false,
-});
-
-RestaurantSchema.virtual("menu", {
-  ref: "MenuItem",
   localField: "_id",
   foreignField: "restaurant",
   justOne: false,
