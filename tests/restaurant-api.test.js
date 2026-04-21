@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const Restaurant = require('../models/Restaurant');
 const Reservation = require('../models/Reservation');
 const {
+  getRestaurants,
+  getRestaurant,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
@@ -10,7 +12,120 @@ const {
 const { createUser } = require('./helpers/auth');
 const { createMockResponse } = require('./helpers/http');
 
+const createRestaurantQuery = (result) => {
+  const query = {
+    populate: jest.fn(() => query),
+    select: jest.fn(() => query),
+    sort: jest.fn(() => query),
+    skip: jest.fn(() => query),
+    limit: jest.fn(() => query),
+    then: (resolve) => Promise.resolve(resolve(result)),
+  };
+
+  return query;
+};
+
 describe('Restaurant profile controller requirements', () => {
+  it('lists restaurants with filtering, select, sort, and pagination', async () => {
+    const restaurants = [{ _id: new mongoose.Types.ObjectId(), name: 'Listed Bistro' }];
+    const query = createRestaurantQuery(restaurants);
+    const req = {
+      query: {
+        select: 'name,address',
+        sort: 'name',
+        page: '2',
+        limit: '1',
+        rating: 'gte:4',
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'find').mockReturnValue(query);
+    jest.spyOn(Restaurant, 'countDocuments').mockResolvedValue(3);
+
+    await getRestaurants(req, res);
+
+    expect(Restaurant.find).toHaveBeenCalledWith({ rating: '$gte:4' });
+    expect(query.select).toHaveBeenCalledWith('name address');
+    expect(query.sort).toHaveBeenCalledWith('name');
+    expect(query.skip).toHaveBeenCalledWith(1);
+    expect(query.limit).toHaveBeenCalledWith(1);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body).toEqual({
+      success: true,
+      count: 1,
+      data: restaurants,
+    });
+  });
+
+  it('lists restaurants with default sort and first page defaults', async () => {
+    const restaurants = [{ _id: new mongoose.Types.ObjectId(), name: 'Default Bistro' }];
+    const query = createRestaurantQuery(restaurants);
+    const req = { query: {} };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'find').mockReturnValue(query);
+    jest.spyOn(Restaurant, 'countDocuments').mockResolvedValue(1);
+
+    await getRestaurants(req, res);
+
+    expect(query.sort).toHaveBeenCalledWith('-createdAt');
+    expect(query.skip).toHaveBeenCalledWith(0);
+    expect(query.limit).toHaveBeenCalledWith(25);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('handles restaurant list query failures', async () => {
+    const query = createRestaurantQuery([]);
+    const req = { query: {} };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'find').mockReturnValue(query);
+    jest.spyOn(Restaurant, 'countDocuments').mockRejectedValue(new Error('count failed'));
+
+    await getRestaurants(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({ success: false });
+  });
+
+  it('gets a single restaurant by id', async () => {
+    const restaurant = { _id: new mongoose.Types.ObjectId(), name: 'Single Bistro' };
+    const req = { params: { id: String(restaurant._id) } };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+
+    await getRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body).toEqual({ success: true, data: restaurant });
+  });
+
+  it('returns false when a single restaurant is missing', async () => {
+    const req = { params: { id: String(new mongoose.Types.ObjectId()) } };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+
+    await getRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({ success: false });
+  });
+
+  it('handles single restaurant lookup failures', async () => {
+    const req = { params: { id: String(new mongoose.Types.ObjectId()) } };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockRejectedValue(new Error('lookup failed'));
+
+    await getRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({ success: false });
+  });
+
   it('creates a restaurant profile and assigns the authenticated owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const createdRestaurant = {
@@ -49,6 +164,34 @@ describe('Restaurant profile controller requirements', () => {
     );
   });
 
+  it('allows admins to create restaurant profiles without owner duplicate check', async () => {
+    const admin = createUser({ role: 'admin' });
+    const createdRestaurant = {
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Admin Bistro',
+      owner: admin.id,
+    };
+    const req = {
+      user: admin,
+      body: {
+        name: 'Admin Bistro',
+        address: '123 Admin Street',
+        telephone: '0212345678',
+        openTime: '10:00',
+        closeTime: '22:00',
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findOne');
+    jest.spyOn(Restaurant, 'create').mockResolvedValue(createdRestaurant);
+
+    await createRestaurant(req, res);
+
+    expect(Restaurant.findOne).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
   it('rejects duplicate restaurant creation for the same restaurant owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const req = {
@@ -73,6 +216,57 @@ describe('Restaurant profile controller requirements', () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toBe('Restaurant owner already has a restaurant profile');
+  });
+
+  it('maps duplicate restaurant creation errors to conflict responses', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const req = {
+      user: owner,
+      body: {
+        name: 'Duplicate Bistro',
+        address: '2 Main Street',
+        telephone: '0222222222',
+        openTime: '10:00',
+        closeTime: '21:00',
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findOne').mockResolvedValue(null);
+    jest.spyOn(Restaurant, 'create').mockRejectedValue({
+      code: 11000,
+      keyPattern: { name: 1 },
+    });
+
+    await createRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.body).toEqual({ success: false, error: 'name already exists' });
+  });
+
+  it('maps duplicate restaurant errors without a field to a generic field message', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const req = {
+      user: owner,
+      body: {
+        name: 'Duplicate Bistro',
+        address: '2 Main Street',
+        telephone: '0222222222',
+        openTime: '10:00',
+        closeTime: '21:00',
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findOne').mockResolvedValue(null);
+    jest.spyOn(Restaurant, 'create').mockRejectedValue({
+      code: 11000,
+    });
+
+    await createRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.body).toEqual({ success: false, error: 'field already exists' });
   });
 
   it('validates mandatory restaurant details', async () => {
@@ -155,6 +349,96 @@ describe('Restaurant profile controller requirements', () => {
     );
   });
 
+  it('returns not found when updating a missing restaurant profile', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: owner,
+      body: { name: 'Missing Bistro' },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+
+    await updateRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.body).toEqual({
+      success: false,
+      error: `Restaurant not found with id of ${restaurantId}`,
+    });
+  });
+
+  it('blocks unauthorized restaurant profile updates', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const otherOwner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: otherOwner,
+      body: { name: 'Illegal Update' },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue({
+      _id: restaurantId,
+      owner: owner.id,
+    });
+
+    await updateRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Not authorized to update this restaurant profile',
+    });
+  });
+
+  it('blocks restaurant profile updates when no user is present', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      body: { name: 'Illegal Update' },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue({
+      _id: restaurantId,
+      owner: owner.id,
+    });
+
+    await updateRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('maps generic restaurant update errors to bad request responses', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: owner,
+      body: { name: 'Broken Update' },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue({
+      _id: restaurantId,
+      owner: owner.id,
+    });
+    jest.spyOn(Restaurant, 'findByIdAndUpdate').mockRejectedValue(new Error('update failed'));
+
+    await updateRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'update failed',
+    });
+  });
+
   it('prevents saving blank mandatory fields when updating restaurant profile', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const restaurantId = new mongoose.Types.ObjectId();
@@ -231,6 +515,74 @@ describe('Restaurant profile controller requirements', () => {
     expect(res.body.error).toBe(
       'Cannot delete restaurant with 1 active (waiting or approved) reservations. Please handle them first.'
     );
+  });
+
+  it('returns not found when deleting a missing restaurant profile', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: owner,
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+
+    await deleteRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.body).toEqual({
+      success: false,
+      error: `Restaurant not found with id of ${restaurantId}`,
+    });
+  });
+
+  it('blocks unauthorized restaurant profile deletes', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const otherOwner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: otherOwner,
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue({
+      _id: restaurantId,
+      owner: owner.id,
+    });
+
+    await deleteRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Not authorized to delete this restaurant profile',
+    });
+  });
+
+  it('maps generic restaurant delete errors to bad request responses', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurantId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { id: String(restaurantId) },
+      user: owner,
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue({
+      _id: restaurantId,
+      owner: owner.id,
+    });
+    jest.spyOn(Reservation, 'find').mockRejectedValue(new Error());
+
+    await deleteRestaurant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Unable to process restaurant request',
+    });
   });
 
   it('removes a restaurant profile when there are no active reservations', async () => {
