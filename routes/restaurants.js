@@ -16,6 +16,7 @@ const {
   getMenuItems,
   addMenuItem,
   addMenuItems,
+  saveMenuItems,
   updateMenuItem,
   deleteMenuItem,
 } = require('../controllers/menuItems');
@@ -32,7 +33,8 @@ router
   .post(protect, authorize('admin', 'restaurantOwner'), addMenuItem);
 router
   .route('/:restaurantId/menu/bulk')
-  .post(protect, authorize('admin', 'restaurantOwner'), addMenuItems);
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenuItems)
+  .put(protect, authorize('admin', 'restaurantOwner'), saveMenuItems);
 router
   .route('/:restaurantId/menu/:menuItemId')
   .put(protect, authorize('admin', 'restaurantOwner'), updateMenuItem)

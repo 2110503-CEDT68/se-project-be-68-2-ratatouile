@@ -51,6 +51,8 @@ const buildMenuItemPayload = (payload) => {
   return menuItemPayload;
 };
 
+const getMenuItemId = (payload) => payload._id || payload.id;
+
 //@desc   Get all menu items for a restaurant
 //@route  GET /api/v1/restaurants/:restaurantId/menu
 //@access Public
@@ -165,6 +167,96 @@ exports.addMenuItems = async (req, res, next) => {
       message: "Menu items added successfully",
       count: menuItems.length,
       data: menuItems,
+    });
+  } catch (err) {
+    const errorResponse = buildMenuErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+//@desc   Save multiple menu items by creating new items and updating existing items
+//@route  PUT /api/v1/restaurants/:restaurantId/menu/bulk
+//@access Private
+exports.saveMenuItems = async (req, res, next) => {
+  try {
+    const restaurant = await getRestaurantOr404(req.params.restaurantId, res);
+
+    if (!restaurant) {
+      return;
+    }
+
+    if (!canManageRestaurant(restaurant, req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: "Not authorized to update this restaurant menu",
+      });
+    }
+
+    const items = req.body.items;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(422).json({
+        success: false,
+        error: ["Please add at least one menu item"],
+      });
+    }
+
+    const itemsToCreate = items.filter((item) => !getMenuItemId(item));
+    const itemsToUpdate = items.filter((item) => getMenuItemId(item));
+    const updatedMenuItems = [];
+
+    for (const item of itemsToUpdate) {
+      const menuItemId = getMenuItemId(item);
+      const updatedMenuItem = await MenuItem.findOneAndUpdate(
+        {
+          _id: menuItemId,
+          restaurant: restaurant._id,
+        },
+        buildMenuItemPayload(item),
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
+
+      if (!updatedMenuItem) {
+        return res.status(404).json({
+          success: false,
+          error: `Menu item not found with id of ${menuItemId}`,
+        });
+      }
+
+      updatedMenuItems.push(updatedMenuItem);
+    }
+
+    const createdMenuItems =
+      itemsToCreate.length > 0
+        ? await MenuItem.insertMany(
+            itemsToCreate.map((item) => ({
+              ...buildMenuItemPayload(item),
+              restaurant: restaurant._id,
+            })),
+            { ordered: true },
+          )
+        : [];
+    const savedMenuItems = [...updatedMenuItems, ...createdMenuItems];
+
+    await Restaurant.updateOne(
+      { _id: restaurant._id },
+      {
+        $addToSet: {
+          menu: { $each: savedMenuItems.map((menuItem) => menuItem._id) },
+        },
+      },
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Menu items saved successfully",
+      createdCount: createdMenuItems.length,
+      updatedCount: updatedMenuItems.length,
+      count: savedMenuItems.length,
+      data: savedMenuItems,
     });
   } catch (err) {
     const errorResponse = buildMenuErrorResponse(err);

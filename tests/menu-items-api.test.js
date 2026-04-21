@@ -6,6 +6,7 @@ const {
   getMenuItems,
   addMenuItem,
   addMenuItems,
+  saveMenuItems,
   updateMenuItem,
   deleteMenuItem,
 } = require('../controllers/menuItems');
@@ -426,6 +427,252 @@ describe('Restaurant menu item controller requirements', () => {
     jest.spyOn(MenuItem, 'insertMany').mockRejectedValue({});
 
     await addMenuItems(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Unable to process menu item request',
+    });
+  });
+
+  it('saves mixed existing and new menu items in one bulk request', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const existingMenuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: { name: 'Old Name', price: 80 },
+    });
+    const updatedMenuItem = {
+      ...existingMenuItem,
+      name: 'Updated Name',
+      price: 95,
+    };
+    const createdMenuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: { name: 'New Dish', price: 120 },
+    });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: {
+        items: [
+          {
+            _id: String(existingMenuItem._id),
+            name: 'Updated Name',
+            price: 95,
+            restaurant: String(new mongoose.Types.ObjectId()),
+          },
+          {
+            name: 'New Dish',
+            price: 120,
+          },
+        ],
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOneAndUpdate').mockResolvedValue(updatedMenuItem);
+    jest.spyOn(MenuItem, 'insertMany').mockResolvedValue([createdMenuItem]);
+    jest.spyOn(Restaurant, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
+
+    await saveMenuItems(req, res);
+
+    expect(MenuItem.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        _id: String(existingMenuItem._id),
+        restaurant: restaurant._id,
+      },
+      expect.not.objectContaining({
+        _id: expect.anything(),
+        id: expect.anything(),
+        restaurant: expect.anything(),
+      }),
+      expect.objectContaining({ new: true, runValidators: true })
+    );
+    expect(MenuItem.insertMany).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'New Dish', restaurant: restaurant._id })],
+      { ordered: true }
+    );
+    expect(Restaurant.updateOne).toHaveBeenCalledWith(
+      { _id: restaurant._id },
+      {
+        $addToSet: {
+          menu: { $each: [updatedMenuItem._id, createdMenuItem._id] },
+        },
+      }
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body).toEqual({
+      success: true,
+      message: 'Menu items saved successfully',
+      createdCount: 1,
+      updatedCount: 1,
+      count: 2,
+      data: [updatedMenuItem, createdMenuItem],
+    });
+  });
+
+  it('saves existing menu items without creating new records', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const existingMenuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: { name: 'Only Update', price: 80 },
+    });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: {
+        items: [
+          {
+            id: String(existingMenuItem._id),
+            name: 'Only Update',
+            price: 85,
+          },
+        ],
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOneAndUpdate').mockResolvedValue(existingMenuItem);
+    jest.spyOn(MenuItem, 'insertMany');
+    jest.spyOn(Restaurant, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
+
+    await saveMenuItems(req, res);
+
+    expect(MenuItem.insertMany).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.createdCount).toBe(0);
+    expect(res.body.updatedCount).toBe(1);
+  });
+
+  it('returns not found when saving menu items for a missing restaurant', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const req = {
+      params: { restaurantId: String(new mongoose.Types.ObjectId()) },
+      user: owner,
+      body: { items: [{ name: 'Missing Restaurant Dish' }] },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'insertMany');
+
+    await saveMenuItems(req, res);
+
+    expect(MenuItem.insertMany).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('blocks bulk menu item saving for another restaurant owner', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const otherOwner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: otherOwner,
+      body: { items: [{ name: 'Illegal Dish' }] },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'insertMany');
+
+    await saveMenuItems(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(MenuItem.insertMany).not.toHaveBeenCalled();
+  });
+
+  it('requires a menu item array when saving menu items in bulk', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: {},
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'insertMany');
+
+    await saveMenuItems(req, res);
+
+    expect(MenuItem.insertMany).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('requires at least one menu item when saving menu items in bulk', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: { items: [] },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+
+    await saveMenuItems(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('returns not found when saving a missing existing menu item', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const missingMenuItemId = new mongoose.Types.ObjectId();
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: {
+        items: [
+          {
+            _id: String(missingMenuItemId),
+            name: 'Missing Existing Dish',
+          },
+        ],
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOneAndUpdate').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'insertMany');
+
+    await saveMenuItems(req, res);
+
+    expect(MenuItem.insertMany).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.body.error).toBe(`Menu item not found with id of ${missingMenuItemId}`);
+  });
+
+  it('handles bulk menu item save failures', async () => {
+    const owner = createUser({ role: 'restaurantOwner' });
+    const restaurant = buildRestaurant({ owner });
+    const existingMenuItem = buildMenuItem({ restaurantId: restaurant._id });
+    const req = {
+      params: { restaurantId: String(restaurant._id) },
+      user: owner,
+      body: {
+        items: [
+          {
+            _id: String(existingMenuItem._id),
+            name: 'Broken Existing Dish',
+          },
+        ],
+      },
+    };
+    const res = createMockResponse();
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOneAndUpdate').mockRejectedValue({});
+
+    await saveMenuItems(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.body).toEqual({
