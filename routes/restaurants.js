@@ -15,6 +15,7 @@ const reviewRouter = require('./reviews');
 const {
   getMenuItems,
   addMenuItem,
+  addMenuItems,
   updateMenuItem,
   deleteMenuItem,
 } = require('../controllers/menuItems');
@@ -29,6 +30,9 @@ router
   .route('/:restaurantId/menu')
   .get(getMenuItems)
   .post(protect, authorize('admin', 'restaurantOwner'), addMenuItem);
+router
+  .route('/:restaurantId/menu/bulk')
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenuItems);
 router
   .route('/:restaurantId/menu/:menuItemId')
   .put(protect, authorize('admin', 'restaurantOwner'), updateMenuItem)

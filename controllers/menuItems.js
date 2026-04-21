@@ -110,6 +110,62 @@ exports.addMenuItem = async (req, res, next) => {
   }
 };
 
+//@desc   Add multiple menu items to a restaurant
+//@route  POST /api/v1/restaurants/:restaurantId/menu/bulk
+//@access Private
+exports.addMenuItems = async (req, res, next) => {
+  try {
+    const restaurant = await getRestaurantOr404(req.params.restaurantId, res);
+
+    if (!restaurant) {
+      return;
+    }
+
+    if (!canManageRestaurant(restaurant, req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: "Not authorized to update this restaurant menu",
+      });
+    }
+
+    const items = req.body.items;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(422).json({
+        success: false,
+        error: ["Please add at least one menu item"],
+      });
+    }
+
+    const menuItems = await MenuItem.insertMany(
+      items.map((item) => ({
+        ...item,
+        restaurant: restaurant._id,
+      })),
+      { ordered: true },
+    );
+
+    await Restaurant.updateOne(
+      { _id: restaurant._id },
+      {
+        $addToSet: {
+          menu: { $each: menuItems.map((menuItem) => menuItem._id) },
+        },
+      },
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Menu items added successfully",
+      count: menuItems.length,
+      data: menuItems,
+    });
+  } catch (err) {
+    const errorResponse = buildMenuErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
 //@desc   Update a menu item for a restaurant
 //@route  PUT /api/v1/restaurants/:restaurantId/menu/:menuItemId
 //@access Private
