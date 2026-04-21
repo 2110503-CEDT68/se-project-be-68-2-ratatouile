@@ -133,6 +133,8 @@ describe('Restaurant menu item controller requirements', () => {
       params: { restaurantId: String(restaurant._id) },
       user: owner,
       body: {
+        _id: new mongoose.Types.ObjectId(),
+        id: String(new mongoose.Types.ObjectId()),
         name: 'Green Curry',
         description: 'Coconut curry',
         price: 120,
@@ -150,10 +152,13 @@ describe('Restaurant menu item controller requirements', () => {
     await addMenuItem(req, res);
 
     expect(MenuItem.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'Green Curry',
-        restaurant: restaurant._id,
+      expect.not.objectContaining({
+        _id: expect.anything(),
+        id: expect.anything(),
       })
+    );
+    expect(MenuItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Green Curry', restaurant: restaurant._id })
     );
     expect(Restaurant.updateOne).toHaveBeenCalledWith(
       { _id: restaurant._id },
@@ -272,6 +277,8 @@ describe('Restaurant menu item controller requirements', () => {
       body: {
         items: [
           {
+            _id: new mongoose.Types.ObjectId(),
+            id: String(new mongoose.Types.ObjectId()),
             name: 'Pad Thai',
             price: 80,
             restaurant: String(new mongoose.Types.ObjectId()),
@@ -291,6 +298,16 @@ describe('Restaurant menu item controller requirements', () => {
 
     await addMenuItems(req, res);
 
+    expect(MenuItem.insertMany).toHaveBeenCalledWith(
+      [
+        expect.not.objectContaining({
+          _id: expect.anything(),
+          id: expect.anything(),
+        }),
+        expect.objectContaining({ name: 'Tom Yum', restaurant: restaurant._id }),
+      ],
+      { ordered: true }
+    );
     expect(MenuItem.insertMany).toHaveBeenCalledWith(
       [
         expect.objectContaining({ name: 'Pad Thai', restaurant: restaurant._id }),
@@ -436,6 +453,8 @@ describe('Restaurant menu item controller requirements', () => {
       },
       user: admin,
       body: {
+        _id: String(new mongoose.Types.ObjectId()),
+        id: String(new mongoose.Types.ObjectId()),
         name: 'Updated Dish',
         price: 95,
         restaurant: String(new mongoose.Types.ObjectId()),
@@ -451,7 +470,11 @@ describe('Restaurant menu item controller requirements', () => {
 
     expect(MenuItem.findByIdAndUpdate).toHaveBeenCalledWith(
       String(menuItem._id),
-      expect.not.objectContaining({ restaurant: expect.anything() }),
+      expect.not.objectContaining({
+        _id: expect.anything(),
+        id: expect.anything(),
+        restaurant: expect.anything(),
+      }),
       expect.objectContaining({ new: true, runValidators: true })
     );
     expect(res.status).toHaveBeenCalledWith(200);

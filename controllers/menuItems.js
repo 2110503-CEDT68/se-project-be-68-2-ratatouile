@@ -45,6 +45,12 @@ const getRestaurantOr404 = async (restaurantId, res) => {
   return restaurant;
 };
 
+const buildMenuItemPayload = (payload) => {
+  const { _id, id, restaurant, ...menuItemPayload } = payload;
+
+  return menuItemPayload;
+};
+
 //@desc   Get all menu items for a restaurant
 //@route  GET /api/v1/restaurants/:restaurantId/menu
 //@access Public
@@ -90,7 +96,7 @@ exports.addMenuItem = async (req, res, next) => {
     }
 
     const menuItem = await MenuItem.create({
-      ...req.body,
+      ...buildMenuItemPayload(req.body),
       restaurant: restaurant._id,
     });
 
@@ -139,7 +145,7 @@ exports.addMenuItems = async (req, res, next) => {
 
     const menuItems = await MenuItem.insertMany(
       items.map((item) => ({
-        ...item,
+        ...buildMenuItemPayload(item),
         restaurant: restaurant._id,
       })),
       { ordered: true },
@@ -196,11 +202,7 @@ exports.updateMenuItem = async (req, res, next) => {
       });
     }
 
-    const menuItemPayload = {
-      ...req.body,
-    };
-
-    delete menuItemPayload.restaurant;
+    const menuItemPayload = buildMenuItemPayload(req.body);
 
     const updatedMenuItem = await MenuItem.findByIdAndUpdate(
       req.params.menuItemId,
