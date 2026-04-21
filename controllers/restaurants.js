@@ -3,6 +3,7 @@
 //@access Public
 const Restaurant = require("../models/Restaurant");
 const Reservation = require('../models/Reservation');
+const MenuItem = require('../models/MenuItem');
 
 const buildRestaurantErrorResponse = (err) => {
   if (err && err.code === 11000) {
@@ -72,7 +73,7 @@ exports.getRestaurants = async (req, res, next) => {
       path: 'user',
       select: 'name'
     }
-  })
+  }).populate('menu')
   // Select Fields
   if (req.query.select) {
     const fields = req.query.select.split(",").join(" ");
@@ -132,7 +133,16 @@ if (startIndex > 0) {
 
 exports.getRestaurant = async (req, res, next) => {
   try {
-    const restaurant = await Restaurant.findById(req.params.id);
+    const restaurant = await Restaurant.findById(req.params.id)
+      .populate('reservations')
+      .populate({
+        path: 'reviews',
+        populate: {
+          path: 'user',
+          select: 'name'
+        }
+      })
+      .populate('menu');
 
     if (!restaurant) {
       return res.status(400).json({ success: false });
@@ -265,6 +275,7 @@ exports.deleteRestaurant = async (req, res, next) => {
     }
 
     await Reservation.deleteMany({restaurant: req.params.id});
+    await MenuItem.deleteMany({restaurant: req.params.id});
     await Restaurant.deleteOne({_id: req.params.id});
 
     res.status(200).json({

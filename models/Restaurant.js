@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const MenuItemSchema = require("./MenuItem");
 
 const RestaurantSchema = new mongoose.Schema(
   {
@@ -44,10 +43,6 @@ const RestaurantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    menu: {
-      type: [MenuItemSchema],
-      default: [],
-    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -69,6 +64,13 @@ RestaurantSchema.virtual("reservations", {
 
 RestaurantSchema.virtual("reviews", {
   ref: "Review",
+  localField: "_id",
+  foreignField: "restaurant",
+  justOne: false,
+});
+
+RestaurantSchema.virtual("menu", {
+  ref: "MenuItem",
   localField: "_id",
   foreignField: "restaurant",
   justOne: false,

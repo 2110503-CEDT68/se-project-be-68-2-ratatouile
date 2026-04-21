@@ -1,82 +1,96 @@
-const Restaurant = require('../models/Restaurant');
+const mongoose = require('mongoose');
 
-const buildRestaurant = (menu) =>
-  new Restaurant({
-    name: 'Menu Test Bistro',
-    address: '123 Menu Street',
-    telephone: '0212345678',
-    openTime: '10:00',
-    closeTime: '22:00',
-    menu,
+const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
+
+const restaurantId = new mongoose.Types.ObjectId();
+
+const buildMenuItem = (overrides = {}) =>
+  new MenuItem({
+    restaurant: restaurantId,
+    name: 'Green Curry',
+    description: 'Rich coconut curry',
+    price: 120,
+    category: 'Thai',
+    ...overrides,
   });
 
-describe('Restaurant menu item schema', () => {
-  it('accepts valid menu items and trims text fields', () => {
-    const restaurant = buildRestaurant([
-      {
-        name: '  Green Curry  ',
-        description: '  Rich coconut curry  ',
-        price: 120,
-        category: '  Thai  ',
-      },
-    ]);
+describe('Restaurant and menu item models', () => {
+  it('exposes menu as a virtual instead of a stored restaurant path', () => {
+    expect(Restaurant.schema.path('menu')).toBeUndefined();
+    expect(Restaurant.schema.virtualpath('menu').options).toEqual(
+      expect.objectContaining({
+        ref: 'MenuItem',
+        localField: '_id',
+        foreignField: 'restaurant',
+        justOne: false,
+      })
+    );
+  });
 
-    const error = restaurant.validateSync();
+  it('accepts valid menu items and trims text fields', () => {
+    const menuItem = buildMenuItem({
+      name: '  Green Curry  ',
+      description: '  Rich coconut curry  ',
+      category: '  Thai  ',
+    });
+
+    const error = menuItem.validateSync();
 
     expect(error).toBeUndefined();
-    expect(restaurant.menu[0].name).toBe('Green Curry');
-    expect(restaurant.menu[0].description).toBe('Rich coconut curry');
-    expect(restaurant.menu[0].category).toBe('Thai');
+    expect(menuItem.name).toBe('Green Curry');
+    expect(menuItem.description).toBe('Rich coconut curry');
+    expect(menuItem.category).toBe('Thai');
+  });
+
+  it('requires a restaurant reference', () => {
+    const menuItem = buildMenuItem({
+      restaurant: undefined,
+    });
+
+    const error = menuItem.validateSync();
+
+    expect(error.errors.restaurant.message).toBe('Please add a restaurant');
   });
 
   it('requires a menu item name', () => {
-    const restaurant = buildRestaurant([
-      {
-        description: 'Missing name',
-        price: 80,
-        category: 'Starter',
-      },
-    ]);
+    const menuItem = buildMenuItem({
+      name: undefined,
+    });
 
-    const error = restaurant.validateSync();
+    const error = menuItem.validateSync();
 
-    expect(error.errors['menu.0.name'].message).toBe('Please add a menu item name');
+    expect(error.errors.name.message).toBe('Please add a menu item name');
   });
 
   it('limits menu item text lengths', () => {
-    const restaurant = buildRestaurant([
-      {
-        name: 'N'.repeat(101),
-        description: 'D'.repeat(301),
-        price: 80,
-        category: 'C'.repeat(51),
-      },
-    ]);
+    const menuItem = buildMenuItem({
+      name: 'N'.repeat(101),
+      description: 'D'.repeat(301),
+      category: 'C'.repeat(51),
+    });
 
-    const error = restaurant.validateSync();
+    const error = menuItem.validateSync();
 
-    expect(error.errors['menu.0.name'].message).toBe(
+    expect(error.errors.name.message).toBe(
       'Menu item name can not be more than 100 characters'
     );
-    expect(error.errors['menu.0.description'].message).toBe(
+    expect(error.errors.description.message).toBe(
       'Menu item description can not be more than 300 characters'
     );
-    expect(error.errors['menu.0.category'].message).toBe(
+    expect(error.errors.category.message).toBe(
       'Menu item category can not be more than 50 characters'
     );
   });
 
   it('rejects negative menu item prices', () => {
-    const restaurant = buildRestaurant([
-      {
-        name: 'Tom Yum',
-        price: -1,
-      },
-    ]);
+    const menuItem = buildMenuItem({
+      price: -1,
+    });
 
-    const error = restaurant.validateSync();
+    const error = menuItem.validateSync();
 
-    expect(error.errors['menu.0.price'].message).toBe(
+    expect(error.errors.price.message).toBe(
       'Menu item price must be greater than or equal to 0'
     );
   });

@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
 
 dotenv.config({ path: './config/config.env' });
 
@@ -128,9 +129,10 @@ async function seedRestaurants() {
     await mongoose.connect(mongoUri);
 
     for (const restaurant of restaurants) {
-      await Restaurant.findOneAndUpdate(
+      const { menu = [], ...restaurantPayload } = restaurant;
+      const savedRestaurant = await Restaurant.findOneAndUpdate(
         { name: restaurant.name },
-        restaurant,
+        restaurantPayload,
         {
           upsert: true,
           new: true,
@@ -138,6 +140,17 @@ async function seedRestaurants() {
           setDefaultsOnInsert: true
         }
       );
+
+      await MenuItem.deleteMany({ restaurant: savedRestaurant._id });
+
+      if (menu.length > 0) {
+        await MenuItem.insertMany(
+          menu.map((menuItem) => ({
+            ...menuItem,
+            restaurant: savedRestaurant._id
+          }))
+        );
+      }
     }
 
     const totalRestaurants = await Restaurant.countDocuments();

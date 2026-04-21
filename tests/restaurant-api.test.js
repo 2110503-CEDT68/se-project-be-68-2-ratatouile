@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const Restaurant = require('../models/Restaurant');
 const Reservation = require('../models/Reservation');
+const MenuItem = require('../models/MenuItem');
 const {
   getRestaurants,
   getRestaurant,
@@ -20,6 +21,18 @@ const createRestaurantQuery = (result) => {
     skip: jest.fn(() => query),
     limit: jest.fn(() => query),
     then: (resolve) => Promise.resolve(resolve(result)),
+  };
+
+  return query;
+};
+
+const createRestaurantLookupQuery = (result, shouldReject = false) => {
+  const query = {
+    populate: jest.fn(() => query),
+    then: (resolve, reject) =>
+      shouldReject
+        ? Promise.reject(result).then(resolve, reject)
+        : Promise.resolve(result).then(resolve, reject),
   };
 
   return query;
@@ -46,6 +59,8 @@ describe('Restaurant profile controller requirements', () => {
     await getRestaurants(req, res);
 
     expect(Restaurant.find).toHaveBeenCalledWith({ rating: '$gte:4' });
+    expect(query.populate).toHaveBeenCalledWith('reservations');
+    expect(query.populate).toHaveBeenCalledWith('menu');
     expect(query.select).toHaveBeenCalledWith('name address');
     expect(query.sort).toHaveBeenCalledWith('name');
     expect(query.skip).toHaveBeenCalledWith(1);
@@ -93,11 +108,14 @@ describe('Restaurant profile controller requirements', () => {
     const restaurant = { _id: new mongoose.Types.ObjectId(), name: 'Single Bistro' };
     const req = { params: { id: String(restaurant._id) } };
     const res = createMockResponse();
+    const query = createRestaurantLookupQuery(restaurant);
 
-    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(Restaurant, 'findById').mockReturnValue(query);
 
     await getRestaurant(req, res);
 
+    expect(query.populate).toHaveBeenCalledWith('reservations');
+    expect(query.populate).toHaveBeenCalledWith('menu');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body).toEqual({ success: true, data: restaurant });
   });
@@ -106,7 +124,7 @@ describe('Restaurant profile controller requirements', () => {
     const req = { params: { id: String(new mongoose.Types.ObjectId()) } };
     const res = createMockResponse();
 
-    jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(Restaurant, 'findById').mockReturnValue(createRestaurantLookupQuery(null));
 
     await getRestaurant(req, res);
 
@@ -118,7 +136,9 @@ describe('Restaurant profile controller requirements', () => {
     const req = { params: { id: String(new mongoose.Types.ObjectId()) } };
     const res = createMockResponse();
 
-    jest.spyOn(Restaurant, 'findById').mockRejectedValue(new Error('lookup failed'));
+    jest
+      .spyOn(Restaurant, 'findById')
+      .mockReturnValue(createRestaurantLookupQuery(new Error('lookup failed'), true));
 
     await getRestaurant(req, res);
 
@@ -602,6 +622,7 @@ describe('Restaurant profile controller requirements', () => {
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(existingRestaurant);
     jest.spyOn(Reservation, 'find').mockResolvedValue([]);
     jest.spyOn(Reservation, 'deleteMany').mockResolvedValue({ deletedCount: 2 });
+    jest.spyOn(MenuItem, 'deleteMany').mockResolvedValue({ deletedCount: 3 });
     jest.spyOn(Restaurant, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
 
     await deleteRestaurant(req, res);
@@ -610,6 +631,7 @@ describe('Restaurant profile controller requirements', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.message).toBe('Restaurant profile deleted successfully');
     expect(Reservation.deleteMany).toHaveBeenCalledWith({ restaurant: String(restaurantId) });
+    expect(MenuItem.deleteMany).toHaveBeenCalledWith({ restaurant: String(restaurantId) });
     expect(Restaurant.deleteOne).toHaveBeenCalledWith({ _id: String(restaurantId) });
   });
 });

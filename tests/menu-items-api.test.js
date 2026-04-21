@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const Restaurant = require('../models/Restaurant');
+const MenuItem = require('../models/MenuItem');
 const {
   getMenuItems,
   addMenuItem,
@@ -10,35 +11,54 @@ const {
 const { createUser } = require('./helpers/auth');
 const { createMockResponse } = require('./helpers/http');
 
-const buildRestaurant = ({ owner, menu = [] } = {}) => {
-  const restaurant = new Restaurant({
-    _id: new mongoose.Types.ObjectId(),
-    owner: owner?.id || new mongoose.Types.ObjectId(),
-    name: 'Menu Route Bistro',
-    address: '123 Menu Route',
-    telephone: '0212345678',
-    openTime: '10:00',
-    closeTime: '22:00',
-    menu,
-  });
+const buildRestaurant = ({ owner } = {}) => ({
+  _id: new mongoose.Types.ObjectId(),
+  owner: owner?.id || String(new mongoose.Types.ObjectId()),
+  name: 'Menu Route Bistro',
+  address: '123 Menu Route',
+  telephone: '0212345678',
+  openTime: '10:00',
+  closeTime: '22:00',
+});
 
-  restaurant.save = jest.fn().mockResolvedValue(restaurant);
+const buildMenuItem = ({ restaurantId, overrides = {} } = {}) => ({
+  _id: new mongoose.Types.ObjectId(),
+  restaurant: restaurantId || new mongoose.Types.ObjectId(),
+  name: 'Pad Thai',
+  description: 'Classic noodles',
+  price: 90,
+  category: 'Thai',
+  ...overrides,
+});
 
-  return restaurant;
+const createMenuFindQuery = (result) => {
+  const query = {
+    sort: jest.fn().mockResolvedValue(result),
+  };
+
+  return query;
 };
 
 describe('Restaurant menu item controller requirements', () => {
   it('lists menu items for a restaurant', async () => {
-    const restaurant = buildRestaurant({
-      menu: [{ name: 'Pad Thai', price: 90 }],
-    });
+    const restaurant = buildRestaurant();
+    const menuItems = [
+      buildMenuItem({
+        restaurantId: restaurant._id,
+        overrides: { name: 'Pad Thai', price: 90 },
+      }),
+    ];
     const req = { params: { restaurantId: String(restaurant._id) } };
     const res = createMockResponse();
+    const query = createMenuFindQuery(menuItems);
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'find').mockReturnValue(query);
 
     await getMenuItems(req, res);
 
+    expect(MenuItem.find).toHaveBeenCalledWith({ restaurant: String(restaurant._id) });
+    expect(query.sort).toHaveBeenCalledWith('category name');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body.success).toBe(true);
     expect(res.body.count).toBe(1);
@@ -51,9 +71,11 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'find');
 
     await getMenuItems(req, res);
 
+    expect(MenuItem.find).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.body).toEqual({
       success: false,
@@ -76,9 +98,36 @@ describe('Restaurant menu item controller requirements', () => {
     });
   });
 
+  it('handles menu item list query failures', async () => {
+    const restaurant = buildRestaurant();
+    const req = { params: { restaurantId: String(restaurant._id) } };
+    const res = createMockResponse();
+    const query = {
+      sort: jest.fn().mockRejectedValue(new Error('menu query failed')),
+    };
+
+    jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'find').mockReturnValue(query);
+
+    await getMenuItems(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body.error).toBe('menu query failed');
+  });
+
   it('adds a menu item for the restaurant owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const restaurant = buildRestaurant({ owner });
+    const createdMenuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: {
+        name: 'Green Curry',
+        description: 'Coconut curry',
+        price: 120,
+        category: 'Thai',
+        picture: 'https://example.com/curry.jpg',
+      },
+    });
     const req = {
       params: { restaurantId: String(restaurant._id) },
       user: owner,
@@ -88,15 +137,22 @@ describe('Restaurant menu item controller requirements', () => {
         price: 120,
         category: 'Thai',
         picture: 'https://example.com/curry.jpg',
+        restaurant: String(new mongoose.Types.ObjectId()),
       },
     };
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'create').mockResolvedValue(createdMenuItem);
 
     await addMenuItem(req, res);
 
-    expect(restaurant.save).toHaveBeenCalled();
+    expect(MenuItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Green Curry',
+        restaurant: restaurant._id,
+      })
+    );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.body.message).toBe('Menu item added successfully');
     expect(res.body.data.name).toBe('Green Curry');
@@ -114,9 +170,11 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'create');
 
     await addMenuItem(req, res);
 
+    expect(MenuItem.create).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
@@ -132,6 +190,7 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'create');
 
     await addMenuItem(req, res);
 
@@ -140,7 +199,7 @@ describe('Restaurant menu item controller requirements', () => {
       success: false,
       error: 'Not authorized to update this restaurant menu',
     });
-    expect(restaurant.save).not.toHaveBeenCalled();
+    expect(MenuItem.create).not.toHaveBeenCalled();
   });
 
   it('blocks menu item creation when no user is present', async () => {
@@ -162,13 +221,9 @@ describe('Restaurant menu item controller requirements', () => {
   it('validates mandatory menu item fields when adding a menu item', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const restaurant = buildRestaurant({ owner });
-    const validationError = new Restaurant({
-      name: 'Validation Bistro',
-      address: '123 Validation Road',
-      telephone: '0212345678',
-      openTime: '10:00',
-      closeTime: '22:00',
-      menu: [{ price: -1 }],
+    const validationError = new MenuItem({
+      restaurant: restaurant._id,
+      price: -1,
     }).validateSync();
     const req = {
       params: { restaurantId: String(restaurant._id) },
@@ -178,7 +233,7 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
-    restaurant.save.mockRejectedValue(validationError);
+    jest.spyOn(MenuItem, 'create').mockRejectedValue(validationError);
 
     await addMenuItem(req, res);
 
@@ -194,28 +249,41 @@ describe('Restaurant menu item controller requirements', () => {
 
   it('updates a menu item for an admin', async () => {
     const admin = createUser({ role: 'admin' });
-    const restaurant = buildRestaurant({
-      menu: [{ name: 'Old Dish', price: 80 }],
+    const restaurant = buildRestaurant();
+    const menuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: { name: 'Old Dish', price: 80 },
     });
-    const menuItemId = String(restaurant.menu[0]._id);
+    const updatedMenuItem = {
+      ...menuItem,
+      name: 'Updated Dish',
+      price: 95,
+    };
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId,
+        menuItemId: String(menuItem._id),
       },
       user: admin,
       body: {
         name: 'Updated Dish',
         price: 95,
+        restaurant: String(new mongoose.Types.ObjectId()),
       },
     };
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(menuItem);
+    jest.spyOn(MenuItem, 'findByIdAndUpdate').mockResolvedValue(updatedMenuItem);
 
     await updateMenuItem(req, res);
 
-    expect(restaurant.save).toHaveBeenCalled();
+    expect(MenuItem.findByIdAndUpdate).toHaveBeenCalledWith(
+      String(menuItem._id),
+      expect.not.objectContaining({ restaurant: expect.anything() }),
+      expect.objectContaining({ new: true, runValidators: true })
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body.message).toBe('Menu item updated successfully');
     expect(res.body.data.name).toBe('Updated Dish');
@@ -235,23 +303,23 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'findOne');
 
     await updateMenuItem(req, res);
 
+    expect(MenuItem.findOne).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('blocks menu item updates for another restaurant owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const otherOwner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({
-      owner,
-      menu: [{ name: 'Protected Dish' }],
-    });
+    const restaurant = buildRestaurant({ owner });
+    const menuItem = buildMenuItem({ restaurantId: restaurant._id });
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId: String(restaurant.menu[0]._id),
+        menuItemId: String(menuItem._id),
       },
       user: otherOwner,
       body: { name: 'Illegal Update' },
@@ -259,16 +327,17 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findByIdAndUpdate');
 
     await updateMenuItem(req, res);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(restaurant.save).not.toHaveBeenCalled();
+    expect(MenuItem.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 
   it('returns not found when updating a missing menu item', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({ owner, menu: [{ name: 'Only Dish' }] });
+    const restaurant = buildRestaurant({ owner });
     const missingMenuItemId = new mongoose.Types.ObjectId();
     const req = {
       params: {
@@ -281,9 +350,14 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(null);
 
     await updateMenuItem(req, res);
 
+    expect(MenuItem.findOne).toHaveBeenCalledWith({
+      _id: String(missingMenuItemId),
+      restaurant: String(restaurant._id),
+    });
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.body).toEqual({
       success: false,
@@ -293,11 +367,12 @@ describe('Restaurant menu item controller requirements', () => {
 
   it('handles generic menu item update failures', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({ owner, menu: [{ name: 'Broken Dish' }] });
+    const restaurant = buildRestaurant({ owner });
+    const menuItem = buildMenuItem({ restaurantId: restaurant._id });
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId: String(restaurant.menu[0]._id),
+        menuItemId: String(menuItem._id),
       },
       user: owner,
       body: { name: 'Still Broken' },
@@ -305,7 +380,8 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
-    restaurant.save.mockRejectedValue(new Error('update failed'));
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(menuItem);
+    jest.spyOn(MenuItem, 'findByIdAndUpdate').mockRejectedValue(new Error('update failed'));
 
     await updateMenuItem(req, res);
 
@@ -318,26 +394,27 @@ describe('Restaurant menu item controller requirements', () => {
 
   it('deletes a menu item for the restaurant owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({
-      owner,
-      menu: [{ name: 'Delete Dish', price: 50 }],
+    const restaurant = buildRestaurant({ owner });
+    const menuItem = buildMenuItem({
+      restaurantId: restaurant._id,
+      overrides: { name: 'Delete Dish', price: 50 },
     });
-    const menuItemId = String(restaurant.menu[0]._id);
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId,
+        menuItemId: String(menuItem._id),
       },
       user: owner,
     };
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(menuItem);
+    jest.spyOn(MenuItem, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
 
     await deleteMenuItem(req, res);
 
-    expect(restaurant.save).toHaveBeenCalled();
-    expect(restaurant.menu.id(menuItemId)).toBeNull();
+    expect(MenuItem.deleteOne).toHaveBeenCalledWith({ _id: menuItem._id });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body).toEqual({
       success: true,
@@ -358,39 +435,40 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(null);
+    jest.spyOn(MenuItem, 'findOne');
 
     await deleteMenuItem(req, res);
 
+    expect(MenuItem.findOne).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('blocks menu item deletion for another restaurant owner', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
     const otherOwner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({
-      owner,
-      menu: [{ name: 'Protected Dish' }],
-    });
+    const restaurant = buildRestaurant({ owner });
+    const menuItem = buildMenuItem({ restaurantId: restaurant._id });
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId: String(restaurant.menu[0]._id),
+        menuItemId: String(menuItem._id),
       },
       user: otherOwner,
     };
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'deleteOne');
 
     await deleteMenuItem(req, res);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(restaurant.save).not.toHaveBeenCalled();
+    expect(MenuItem.deleteOne).not.toHaveBeenCalled();
   });
 
   it('returns not found when deleting a missing menu item', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({ owner, menu: [{ name: 'Only Dish' }] });
+    const restaurant = buildRestaurant({ owner });
     const missingMenuItemId = new mongoose.Types.ObjectId();
     const req = {
       params: {
@@ -402,6 +480,7 @@ describe('Restaurant menu item controller requirements', () => {
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(null);
 
     await deleteMenuItem(req, res);
 
@@ -411,18 +490,20 @@ describe('Restaurant menu item controller requirements', () => {
 
   it('handles menu item delete failures with a default message', async () => {
     const owner = createUser({ role: 'restaurantOwner' });
-    const restaurant = buildRestaurant({ owner, menu: [{ name: 'Broken Delete' }] });
+    const restaurant = buildRestaurant({ owner });
+    const menuItem = buildMenuItem({ restaurantId: restaurant._id });
     const req = {
       params: {
         restaurantId: String(restaurant._id),
-        menuItemId: String(restaurant.menu[0]._id),
+        menuItemId: String(menuItem._id),
       },
       user: owner,
     };
     const res = createMockResponse();
 
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(restaurant);
-    restaurant.save.mockRejectedValue({});
+    jest.spyOn(MenuItem, 'findOne').mockResolvedValue(menuItem);
+    jest.spyOn(MenuItem, 'deleteOne').mockRejectedValue({});
 
     await deleteMenuItem(req, res);
 

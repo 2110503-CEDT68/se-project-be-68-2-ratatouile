@@ -1,4 +1,5 @@
 const Restaurant = require("../models/Restaurant");
+const MenuItem = require("../models/MenuItem");
 
 const buildMenuErrorResponse = (err) => {
   if (err && err.name === "ValidationError") {
@@ -55,10 +56,14 @@ exports.getMenuItems = async (req, res, next) => {
       return;
     }
 
+    const menuItems = await MenuItem.find({
+      restaurant: req.params.restaurantId,
+    }).sort("category name");
+
     res.status(200).json({
       success: true,
-      count: restaurant.menu.length,
-      data: restaurant.menu,
+      count: menuItems.length,
+      data: menuItems,
     });
   } catch (err) {
     const errorResponse = buildMenuErrorResponse(err);
@@ -84,13 +89,15 @@ exports.addMenuItem = async (req, res, next) => {
       });
     }
 
-    restaurant.menu.push(req.body);
-    await restaurant.save();
+    const menuItem = await MenuItem.create({
+      ...req.body,
+      restaurant: restaurant._id,
+    });
 
     res.status(201).json({
       success: true,
       message: "Menu item added successfully",
-      data: restaurant.menu[restaurant.menu.length - 1],
+      data: menuItem,
     });
   } catch (err) {
     const errorResponse = buildMenuErrorResponse(err);
@@ -116,7 +123,10 @@ exports.updateMenuItem = async (req, res, next) => {
       });
     }
 
-    const menuItem = restaurant.menu.id(req.params.menuItemId);
+    const menuItem = await MenuItem.findOne({
+      _id: req.params.menuItemId,
+      restaurant: req.params.restaurantId,
+    });
 
     if (!menuItem) {
       return res.status(404).json({
@@ -125,13 +135,25 @@ exports.updateMenuItem = async (req, res, next) => {
       });
     }
 
-    Object.assign(menuItem, req.body);
-    await restaurant.save();
+    const menuItemPayload = {
+      ...req.body,
+    };
+
+    delete menuItemPayload.restaurant;
+
+    const updatedMenuItem = await MenuItem.findByIdAndUpdate(
+      req.params.menuItemId,
+      menuItemPayload,
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     res.status(200).json({
       success: true,
       message: "Menu item updated successfully",
-      data: menuItem,
+      data: updatedMenuItem,
     });
   } catch (err) {
     const errorResponse = buildMenuErrorResponse(err);
@@ -157,7 +179,10 @@ exports.deleteMenuItem = async (req, res, next) => {
       });
     }
 
-    const menuItem = restaurant.menu.id(req.params.menuItemId);
+    const menuItem = await MenuItem.findOne({
+      _id: req.params.menuItemId,
+      restaurant: req.params.restaurantId,
+    });
 
     if (!menuItem) {
       return res.status(404).json({
@@ -166,8 +191,7 @@ exports.deleteMenuItem = async (req, res, next) => {
       });
     }
 
-    restaurant.menu.pull(menuItem._id);
-    await restaurant.save();
+    await MenuItem.deleteOne({ _id: menuItem._id });
 
     res.status(200).json({
       success: true,
