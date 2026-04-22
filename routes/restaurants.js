@@ -13,12 +13,14 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const reviewRouter = require('./reviews');
 const {
-  getMenuItems,
-  addMenuItem,
-  addMenuItems,
-  updateMenuItem,
-  deleteMenuItem,
-} = require('../controllers/menuItems');
+  getMenus,
+  getMenu,
+  addMenu,
+  addMenus,
+  saveMenus,
+  updateMenu,
+  deleteMenu,
+} = require('../controllers/menus');
 
 // Re-route into other resource routers
 router.use('/:restaurantId/reservations', reservationRouter);
@@ -28,15 +30,30 @@ router
   .post(protect, authorize('admin', 'restaurantOwner'), createRestaurant);
 router
   .route('/:restaurantId/menu')
-  .get(getMenuItems)
-  .post(protect, authorize('admin', 'restaurantOwner'), addMenuItem);
+  .get(getMenus)
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenu);
 router
   .route('/:restaurantId/menu/bulk')
-  .post(protect, authorize('admin', 'restaurantOwner'), addMenuItems);
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenus)
+  .put(protect, authorize('admin', 'restaurantOwner'), saveMenus);
 router
-  .route('/:restaurantId/menu/:menuItemId')
-  .put(protect, authorize('admin', 'restaurantOwner'), updateMenuItem)
-  .delete(protect, authorize('admin', 'restaurantOwner'), deleteMenuItem);
+  .route('/:restaurantId/menu/:menuId')
+  .get(getMenu)
+  .put(protect, authorize('admin', 'restaurantOwner'), updateMenu)
+  .delete(protect, authorize('admin', 'restaurantOwner'), deleteMenu);
+router
+  .route('/:restaurantId/menus')
+  .get(getMenus)
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenu);
+router
+  .route('/:restaurantId/menus/bulk')
+  .post(protect, authorize('admin', 'restaurantOwner'), addMenus)
+  .put(protect, authorize('admin', 'restaurantOwner'), saveMenus);
+router
+  .route('/:restaurantId/menus/:menuId')
+  .get(getMenu)
+  .put(protect, authorize('admin', 'restaurantOwner'), updateMenu)
+  .delete(protect, authorize('admin', 'restaurantOwner'), deleteMenu);
 router
   .route('/:id')
   .get(getRestaurant)

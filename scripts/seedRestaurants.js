@@ -1,7 +1,7 @@
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const Restaurant = require('../models/Restaurant');
-const MenuItem = require('../models/MenuItem');
+const Menu = require('../models/Menu');
 
 dotenv.config({ path: './config/config.env' });
 
@@ -13,18 +13,23 @@ const restaurants = [
     openTime: '11:00',
     closeTime: '22:00',
     picture: '/img/1.png',
-    menu: [
+    menus: [
       {
-        name: 'Tom Yum River Prawn Pasta',
-        description: 'Creamy spicy pasta with grilled river prawn.',
-        price: 320,
-        category: 'Main Course'
-      },
-      {
-        name: 'Thai Milk Tea Tiramisu',
-        description: 'Soft layered tiramisu infused with Thai tea.',
-        price: 165,
-        category: 'Dessert'
+        title: 'Main Menu',
+        items: [
+          {
+            name: 'Tom Yum River Prawn Pasta',
+            description: 'Creamy spicy pasta with grilled river prawn.',
+            price: 320,
+            category: 'Main Course'
+          },
+          {
+            name: 'Thai Milk Tea Tiramisu',
+            description: 'Soft layered tiramisu infused with Thai tea.',
+            price: 165,
+            category: 'Dessert'
+          }
+        ]
       }
     ]
   },
@@ -35,18 +40,23 @@ const restaurants = [
     openTime: '10:30',
     closeTime: '21:30',
     picture: '/img/2.png',
-    menu: [
+    menus: [
       {
-        name: 'Charcoal Ribeye',
-        description: 'Australian ribeye with roasted garlic butter.',
-        price: 890,
-        category: 'Steak'
-      },
-      {
-        name: 'Truffle Fries',
-        description: 'Crispy fries with truffle oil and parmesan.',
-        price: 190,
-        category: 'Side'
+        title: 'Signature Menu',
+        items: [
+          {
+            name: 'Charcoal Ribeye',
+            description: 'Australian ribeye with roasted garlic butter.',
+            price: 890,
+            category: 'Steak'
+          },
+          {
+            name: 'Truffle Fries',
+            description: 'Crispy fries with truffle oil and parmesan.',
+            price: 190,
+            category: 'Side'
+          }
+        ]
       }
     ]
   },
@@ -57,18 +67,23 @@ const restaurants = [
     openTime: '09:00',
     closeTime: '20:30',
     picture: '/img/3.png',
-    menu: [
+    menus: [
       {
-        name: 'Grilled Salmon Rice Bowl',
-        description: 'Salmon, jasmine rice, herbs, and citrus dressing.',
-        price: 295,
-        category: 'Bowl'
-      },
-      {
-        name: 'Yuzu Sparkling Soda',
-        description: 'Refreshing sparkling soda with yuzu and mint.',
-        price: 120,
-        category: 'Drink'
+        title: 'All Day Menu',
+        items: [
+          {
+            name: 'Grilled Salmon Rice Bowl',
+            description: 'Salmon, jasmine rice, herbs, and citrus dressing.',
+            price: 295,
+            category: 'Bowl'
+          },
+          {
+            name: 'Yuzu Sparkling Soda',
+            description: 'Refreshing sparkling soda with yuzu and mint.',
+            price: 120,
+            category: 'Drink'
+          }
+        ]
       }
     ]
   },
@@ -79,18 +94,23 @@ const restaurants = [
     openTime: '08:00',
     closeTime: '21:00',
     picture: '/img/4.png',
-    menu: [
+    menus: [
       {
-        name: 'Woodfired Burrata Pizza',
-        description: 'Neapolitan-style pizza with burrata and basil.',
-        price: 420,
-        category: 'Pizza'
-      },
-      {
-        name: 'Roasted Tomato Soup',
-        description: 'Smooth roasted tomato soup with garlic toast.',
-        price: 180,
-        category: 'Soup'
+        title: 'Oven Specials',
+        items: [
+          {
+            name: 'Woodfired Burrata Pizza',
+            description: 'Neapolitan-style pizza with burrata and basil.',
+            price: 420,
+            category: 'Pizza'
+          },
+          {
+            name: 'Roasted Tomato Soup',
+            description: 'Smooth roasted tomato soup with garlic toast.',
+            price: 180,
+            category: 'Soup'
+          }
+        ]
       }
     ]
   },
@@ -101,18 +121,23 @@ const restaurants = [
     openTime: '11:30',
     closeTime: '23:00',
     picture: '/img/5.png',
-    menu: [
+    menus: [
       {
-        name: 'Beef Massaman Rice Set',
-        description: 'Slow-cooked beef curry with fragrant rice.',
-        price: 260,
-        category: 'Rice Set'
-      },
-      {
-        name: 'Coconut Ice Cream Toast',
-        description: 'Butter toast with coconut ice cream and peanuts.',
-        price: 155,
-        category: 'Dessert'
+        title: 'Chef Picks',
+        items: [
+          {
+            name: 'Beef Massaman Rice Set',
+            description: 'Slow-cooked beef curry with fragrant rice.',
+            price: 260,
+            category: 'Rice Set'
+          },
+          {
+            name: 'Coconut Ice Cream Toast',
+            description: 'Butter toast with coconut ice cream and peanuts.',
+            price: 155,
+            category: 'Dessert'
+          }
+        ]
       }
     ]
   }
@@ -129,7 +154,7 @@ async function seedRestaurants() {
     await mongoose.connect(mongoUri);
 
     for (const restaurant of restaurants) {
-      const { menu = [], ...restaurantPayload } = restaurant;
+      const { menus = [], ...restaurantPayload } = restaurant;
       const savedRestaurant = await Restaurant.findOneAndUpdate(
         { name: restaurant.name },
         restaurantPayload,
@@ -141,24 +166,24 @@ async function seedRestaurants() {
         }
       );
 
-      await MenuItem.deleteMany({ restaurant: savedRestaurant._id });
+      await Menu.deleteMany({ restaurant: savedRestaurant._id });
 
       let menuIds = [];
 
-      if (menu.length > 0) {
-        const menuItems = await MenuItem.insertMany(
-          menu.map((menuItem) => ({
-            ...menuItem,
+      if (menus.length > 0) {
+        const createdMenus = await Menu.insertMany(
+          menus.map((menu) => ({
+            ...menu,
             restaurant: savedRestaurant._id
           }))
         );
 
-        menuIds = menuItems.map((menuItem) => menuItem._id);
+        menuIds = createdMenus.map((menu) => menu._id);
       }
 
       await Restaurant.updateOne(
         { _id: savedRestaurant._id },
-        { $set: { menu: menuIds } }
+        { $set: { menus: menuIds } }
       );
     }
 

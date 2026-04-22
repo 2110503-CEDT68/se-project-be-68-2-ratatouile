@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const Restaurant = require('../models/Restaurant');
 const Reservation = require('../models/Reservation');
-const MenuItem = require('../models/MenuItem');
+const Menu = require('../models/Menu');
 const {
   getRestaurants,
   getRestaurant,
@@ -60,7 +60,7 @@ describe('Restaurant profile controller requirements', () => {
 
     expect(Restaurant.find).toHaveBeenCalledWith({ rating: '$gte:4' });
     expect(query.populate).toHaveBeenCalledWith('reservations');
-    expect(query.populate).toHaveBeenCalledWith('menu');
+    expect(query.populate).toHaveBeenCalledWith('menus');
     expect(query.select).toHaveBeenCalledWith('name address');
     expect(query.sort).toHaveBeenCalledWith('name');
     expect(query.skip).toHaveBeenCalledWith(1);
@@ -115,7 +115,7 @@ describe('Restaurant profile controller requirements', () => {
     await getRestaurant(req, res);
 
     expect(query.populate).toHaveBeenCalledWith('reservations');
-    expect(query.populate).toHaveBeenCalledWith('menu');
+    expect(query.populate).toHaveBeenCalledWith('menus');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body).toEqual({ success: true, data: restaurant });
   });
@@ -622,7 +622,7 @@ describe('Restaurant profile controller requirements', () => {
     jest.spyOn(Restaurant, 'findById').mockResolvedValue(existingRestaurant);
     jest.spyOn(Reservation, 'find').mockResolvedValue([]);
     jest.spyOn(Reservation, 'deleteMany').mockResolvedValue({ deletedCount: 2 });
-    jest.spyOn(MenuItem, 'deleteMany').mockResolvedValue({ deletedCount: 3 });
+    jest.spyOn(Menu, 'deleteMany').mockResolvedValue({ deletedCount: 3 });
     jest.spyOn(Restaurant, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
 
     await deleteRestaurant(req, res);
@@ -631,7 +631,7 @@ describe('Restaurant profile controller requirements', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.message).toBe('Restaurant profile deleted successfully');
     expect(Reservation.deleteMany).toHaveBeenCalledWith({ restaurant: String(restaurantId) });
-    expect(MenuItem.deleteMany).toHaveBeenCalledWith({ restaurant: String(restaurantId) });
+    expect(Menu.deleteMany).toHaveBeenCalledWith({ restaurant: String(restaurantId) });
     expect(Restaurant.deleteOne).toHaveBeenCalledWith({ _id: String(restaurantId) });
   });
 });
