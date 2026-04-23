@@ -16,3 +16,19 @@ JWT_COOKIE_EXPIRE=30
 ```
 
 The server loads this file from `./config/config.env` in `server.js`.
+
+# Docker Local Run
+
+Build the backend image:
+
+```bash
+docker build -t ratatouille-be .
+```
+
+Run the backend container with the local env file:
+
+```bash
+docker run --rm -p 5050:5050 --env-file config/config.env --name ratatouille-be ratatouille-be
+```
+
+The API should then be available at `http://localhost:5050`.

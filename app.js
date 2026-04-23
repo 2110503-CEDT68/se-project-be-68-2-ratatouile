@@ -39,6 +39,10 @@ app.use(express.json());
 app.set('query parser', 'extended');
 app.use(cookieParser());
 
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.use('/api/v1/restaurants', restaurants);
 app.use('/api/v1/auth', auth);
 app.use('/api/v1/reservations', reservations);
