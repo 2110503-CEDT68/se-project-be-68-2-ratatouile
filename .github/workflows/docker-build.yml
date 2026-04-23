@@ -28,6 +28,23 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
+          load: true
           tags: ratatouille-be:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan backend Docker image with Trivy
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ratatouille-be:ci
+          format: table
+          output: trivy-image-results.txt
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Upload backend Trivy image report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-trivy-image-report
+          path: trivy-image-results.txt
