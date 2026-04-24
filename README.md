@@ -17,6 +17,20 @@ JWT_COOKIE_EXPIRE=30
 
 The server loads this file from `./config/config.env` in `server.js`.
 
+# API Docs
+
+After starting the backend, open Swagger UI at:
+
+```text
+http://localhost:5050/api-docs
+```
+
+The raw OpenAPI document is available at:
+
+```text
+http://localhost:5050/api-docs.json
+```
+
 # Docker Local Run
 
 Build the backend image:
@@ -32,3 +46,33 @@ docker run --rm -p 5050:5050 --env-file config/config.env --name ratatouille-be 
 ```
 
 The API should then be available at `http://localhost:5050`.
+
+## Docker Compose Local Stack
+
+This compose file expects the frontend repo to be next to this backend repo:
+
+```text
+fe/
+  se-project-be-68-2-ratatouile/
+  se-project-fe-68-2-ratatouile/
+```
+
+Start MongoDB, backend, and frontend together:
+
+```bash
+docker compose up --build
+```
+
+Open the app at `http://localhost:3000`. The backend API is available at `http://localhost:5050`.
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Remove the local MongoDB volume too:
+
+```bash
+docker compose down -v
+```
