@@ -1,11 +1,13 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
 
 const restaurants = require('./routes/restaurants');
 const auth = require('./routes/auth');
 const reservations = require('./routes/reservations');
 const reviews = require('./routes/reviews');
+const openApiSpec = require('./docs/openapi');
 
 const app = express();
 
@@ -42,6 +44,11 @@ app.use(cookieParser());
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
+
+app.get('/api-docs.json', (_req, res) => {
+  res.status(200).json(openApiSpec);
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
 app.use('/api/v1/restaurants', restaurants);
 app.use('/api/v1/auth', auth);

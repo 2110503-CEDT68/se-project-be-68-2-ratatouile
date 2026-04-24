@@ -1,0 +1,52 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ratatouille-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  backend:
+    build:
+      context: .
+    container_name: ratatouille-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    environment:
+      NODE_ENV: development
+      PORT: 5050
+      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URLS: http://localhost:3000,http://frontend:3000
+      MONGO_URI: mongodb://mongodb:27017/ratatouille
+      JWT_SECRET: local-dev-secret
+      JWT_EXPIRE: 30d
+      JWT_COOKIE_EXPIRE: 30
+    ports:
+      - "5050:5050"
+
+  frontend:
+    build:
+      context: ../se-project-fe-68-2-ratatouile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:5050
+        INTERNAL_API_BASE_URL: http://backend:5050
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: local-nextauth-secret
+    container_name: ratatouille-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: local-nextauth-secret
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:5050
+      INTERNAL_API_BASE_URL: http://backend:5050
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongodb_data:
