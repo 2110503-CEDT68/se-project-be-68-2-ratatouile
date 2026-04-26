@@ -17,6 +17,16 @@ JWT_COOKIE_EXPIRE=30
 
 The server loads this file from `./config/config.env` in `server.js`.
 
+For production or fixed deployed frontends, add allowed frontend origins:
+
+```env
+FRONTEND_URLS=https://your-frontend.example.com,http://localhost:3000
+```
+
+In local development, private LAN frontend origins on ports `3000`, `3001`, and `3002` are allowed automatically.
+
+For Vercel deployment, add the required environment variables in the Vercel project settings. `vercel.json` routes all requests to `server.js`.
+
 # API Docs
 
 After starting the backend, open Swagger UI at:
