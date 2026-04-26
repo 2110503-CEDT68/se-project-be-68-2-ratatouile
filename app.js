@@ -12,6 +12,7 @@ const openApiSpec = require('./docs/openapi');
 const app = express();
 
 const defaultAllowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://localhost:3002'];
+const devFrontendPorts = new Set(['3000', '3001', '3002']);
 
 const allowedOrigins = [
   ...defaultAllowedOrigins,
@@ -21,9 +22,37 @@ const allowedOrigins = [
     .filter(Boolean),
 ];
 
+const isPrivateIp = (hostname) => {
+  const parts = hostname.split('.').map(Number);
+
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
+    return false;
+  }
+
+  const [first, second] = parts;
+  return (
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+};
+
+const isAllowedDevLanOrigin = (origin) => {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && devFrontendPorts.has(url.port) && isPrivateIp(url.hostname);
+  } catch (_err) {
+    return false;
+  }
+};
+
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || isAllowedDevLanOrigin(origin)) {
       return callback(null, true);
     }
 
